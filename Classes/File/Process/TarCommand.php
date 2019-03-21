@@ -34,7 +34,7 @@ class TarCommand
      * @param null $outputCallback
      * @return int
      */
-    public function tar(array $additionalArguments = array(), $outputCallback = null)
+    public function tar(array $additionalArguments = [], $outputCallback = null): int
     {
         $this->processBuilder->setPrefix(self::getTarBinPath());
         $this->processBuilder->setArguments($additionalArguments);
@@ -47,9 +47,9 @@ class TarCommand
      * @param callable $outputCallback
      * @return callable
      */
-    protected function buildDefaultOutputCallback($outputCallback)
+    protected function buildDefaultOutputCallback($outputCallback): callable
     {
-        if (!is_callable($outputCallback)) {
+        if (!\is_callable($outputCallback)) {
             $outputCallback = function ($type, $output) {
                 if (Process::OUT === $type) {
                     // Explicitly just echo out for now (avoid symfony console formatting)
@@ -65,13 +65,13 @@ class TarCommand
      *
      * @return string
      */
-    public static function getTarBinPath()
+    public static function getTarBinPath(): string
     {
         if (getenv('path_tar_bin')) {
             return getenv('path_tar_bin');
-        } else {
-            return 'tar';
         }
+
+        return 'tar';
     }
 
 }

@@ -22,7 +22,7 @@ class MysqlCommand
     /**
      * @var array
      */
-    protected $dbConfig = array();
+    protected $dbConfig = [];
 
     /**
      * MysqlCommand constructor.
@@ -38,11 +38,11 @@ class MysqlCommand
 
     /**
      * @param array $additionalArguments
-     * @param resource $inputStream
+     * @param bool|resource $inputStream
      * @param null $outputCallback
      * @return int
      */
-    public function mysql(array $additionalArguments = array(), $inputStream = STDIN, $outputCallback = null)
+    public function mysql(array $additionalArguments = [], $inputStream = STDIN, $outputCallback = null): int
     {
         $this->processBuilder->setPrefix(self::getMysqlBinPath());
         $this->processBuilder->setArguments(array_merge($this->buildConnectionArguments(), $additionalArguments));
@@ -56,7 +56,7 @@ class MysqlCommand
      * @param null $outputCallback
      * @return int
      */
-    public function mysqldump(array $additionalArguments = array(), $outputCallback = null)
+    public function mysqldump(array $additionalArguments = array(), $outputCallback = null): int
     {
         $this->processBuilder->setPrefix(self::getMysqlDumpBinPath());
         $this->processBuilder->setArguments(array_merge($this->buildConnectionArguments(), $additionalArguments));
@@ -69,9 +69,9 @@ class MysqlCommand
      * @param callable $outputCallback
      * @return callable
      */
-    protected function buildDefaultOutputCallback($outputCallback)
+    protected function buildDefaultOutputCallback($outputCallback): callable
     {
-        if (!is_callable($outputCallback)) {
+        if (!\is_callable($outputCallback)) {
             $outputCallback = function ($type, $output) {
                 if (Process::OUT === $type) {
                     // Explicitly just echo out for now (avoid symfony console formatting)
@@ -82,7 +82,10 @@ class MysqlCommand
         return $outputCallback;
     }
 
-    protected function buildConnectionArguments()
+    /**
+     * @return array
+     */
+    protected function buildConnectionArguments(): array
     {
         if (!empty($this->dbConfig['user'])) {
             $arguments[] = '-u';
@@ -113,13 +116,13 @@ class MysqlCommand
      *
      * @return string
      */
-    public static function getMysqlBinPath()
+    public static function getMysqlBinPath(): string
     {
         if (getenv('path_mysql_bin')) {
             return getenv('path_mysql_bin');
-        } else {
-            return 'mysql';
         }
+
+        return 'mysql';
     }
 
     /**
@@ -131,8 +134,8 @@ class MysqlCommand
     {
         if (getenv('path_mysqldump_bin')) {
             return getenv('path_mysqldump_bin');
-        } else {
-            return 'mysqldump';
         }
+
+        return 'mysqldump';
     }
 }

@@ -12,6 +12,7 @@ use Helhum\Typo3Console\Database\Schema\SchemaUpdateType;
 use Helhum\Typo3Console\Mvc\Controller\CommandController;
 use Symfony\Component\Process\Process;
 use Symfony\Component\Process\ProcessBuilder;
+use TYPO3\CMS\Core\Crypto\Random;
 use TYPO3\CMS\Core\Database\DatabaseConnection;
 use TYPO3\CMS\Core\Resource\ResourceFactory;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
@@ -75,6 +76,8 @@ class BackupCommandController extends CommandController
      * @param string $prefix Specific prefix (name) to use for backup file
      * @param string $backupFolder Alternative path of backup folder
      * @return void
+     * @throws \TYPO3\CMS\Extbase\Mvc\Exception\StopActionException
+     * @throws \TYPO3\CMS\Extbase\Mvc\Exception\StopActionException
      */
     public function createCommand($prefix = '', $backupFolder = '')
     {
@@ -139,6 +142,8 @@ class BackupCommandController extends CommandController
      * @param string $backupFolder Alternative path of backup folder
      * @param bool $plainRestore Restore db without sanitizing and merging with local tables
      * @param bool $force Force restore in Production context
+     * @throws \TYPO3\CMS\Core\Type\Exception\InvalidEnumerationValueException
+     * @throws \TYPO3\CMS\Extbase\Mvc\Exception\StopActionException
      */
     public function restoreCommand($backup = '', $backupFolder = '', $plainRestore = false, $force = false)
     {
@@ -449,7 +454,7 @@ class BackupCommandController extends CommandController
      * @param string $tmpFolder
      * @return array
      */
-    protected function packageFiles($tmpFolder)
+    protected function packageFiles($tmpFolder): array
     {
         $processBuilder = new ProcessBuilder();
         $processBuilder->setTimeout($this->processTimeOut);
@@ -491,7 +496,7 @@ class BackupCommandController extends CommandController
      *
      * @return array
      */
-    protected function getAvailableBackups()
+    protected function getAvailableBackups(): array
     {
         $backups = [];
         foreach (glob($this->backupFolder . '*.tgz') as $file) {
@@ -605,12 +610,12 @@ class BackupCommandController extends CommandController
     }
 
     /**
-     * Restore the complete DB using mysql
-     *
      * @param string $sqlFile
-     * @return void
+     * @param $plainRestore
+     * @return int
+     * @throws \TYPO3\CMS\Core\Type\Exception\InvalidEnumerationValueException
      */
-    protected function restoreDB($sqlFile, $plainRestore)
+    protected function restoreDB($sqlFile, $plainRestore): int
     {
         if (!$plainRestore) {
             $this->createCopyOfTablesToMerge();
@@ -655,6 +660,7 @@ class BackupCommandController extends CommandController
     }
 
     /**
+     * @param $file
      * @return \Closure
      */
     protected function buildOutputToFileClosure($file)
@@ -748,11 +754,11 @@ class BackupCommandController extends CommandController
     {
         $path = rtrim(PathUtility::getCanonicalPath(PATH_site . self::PATH), '/') . '/';
 
-        if (is_writable($path) || is_writable(dirname($path))) {
+        if (is_writable($path) || is_writable(\dirname($path))) {
             return $path;
-        } else {
-            return PATH_site . 'typo3temp/backups';
         }
+        return PATH_site . 'typo3temp/backups';
+
     }
 
     /**
@@ -781,7 +787,7 @@ class BackupCommandController extends CommandController
      */
     protected function createPrefix()
     {
-        return date('Y-m-d_h-i') . '-' . GeneralUtility::getRandomHexString(16);
+        return date('Y-m-d_h-i') . '-' . GeneralUtility::makeInstance(Random::class)->generateRandomHexString(16);
     }
 
     /**
@@ -793,9 +799,9 @@ class BackupCommandController extends CommandController
     {
         if (getenv('path_mysql_bin')) {
             return getenv('path_mysql_bin');
-        } else {
-            return 'mysql';
         }
+
+        return 'mysql';
     }
 
     /**
@@ -807,9 +813,9 @@ class BackupCommandController extends CommandController
     {
         if (getenv('path_mysqldump_bin')) {
             return getenv('path_mysqldump_bin');
-        } else {
-            return 'mysqldump';
         }
+
+        return 'mysqldump';
     }
 
     /**
