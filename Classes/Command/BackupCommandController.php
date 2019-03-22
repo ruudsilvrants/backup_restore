@@ -24,11 +24,11 @@ class BackupCommandController extends CommandController
 {
 
     /**
-     * @var int processTimeOut in seconds, default on 2 minutes.
+     * @var int processTimeOut in seconds, default on 10 minutes.
      * This variable can be override by setting the environment variable:BACKUP_PROCESS_TIME_OUT
-     * For example: BACKUP_PROCESS_TIME_OUT="300" php typo3cms backup:create
+     * For example: BACKUP_PROCESS_TIME_OUT="30000" php typo3cms backup:create
      */
-    protected $processTimeOut = 120;
+    protected $processTimeOut = 600;
 
     /**
      * Default backup folder relative to web root of site
@@ -573,9 +573,12 @@ class BackupCommandController extends CommandController
     protected function dumpDB($tmpFolder)
     {
         $dbConfig = $this->connectionConfiguration->build();
+
+        $processBuilder = new ProcessBuilder();
+        $processBuilder->setTimeout($this->processTimeOut);
         $mysqlCommand = new MysqlCommand(
             $dbConfig,
-            new ProcessBuilder()
+            $processBuilder
         );
         $dbDumpFile = 'db.sql';
         $path = $tmpFolder . $dbDumpFile;
@@ -614,9 +617,11 @@ class BackupCommandController extends CommandController
         }
 
         $dbConfig = $this->connectionConfiguration->build();
+        $processBuilder = new ProcessBuilder();
+        $processBuilder->setTimeout($this->processTimeOut);
         $mysqlCommand = new MysqlCommand(
             $dbConfig,
-            new ProcessBuilder()
+            $processBuilder
         );
 
         $exitCode = $mysqlCommand->mysql(

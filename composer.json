@@ -5,8 +5,8 @@
 	"license": ["GPL-2.0+"],
 	"version": "1.0.0"
 	"require": {
-		"typo3/cms-core": ">=7.6.9||>=8.0",
-		"helhum/typo3-console": ">=3.5"
+		"typo3/cms-core": ">=8.7",
+		"helhum/typo3-console": ">=4.6"
 	},
 	"autoload": {
 		"psr-4": {
@@ -19,7 +19,7 @@
 	},
 	"extra": {
 		"branch-alias": {
-			"dev-master": "1.0.x-dev"
+			"dev-master": "2.0.x-dev"
 		}
 	}
 }
