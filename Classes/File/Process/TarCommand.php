@@ -1,33 +1,20 @@
 <?php
+
 namespace BeechIt\BackupRestore\File\Process;
 
-    /*
-     * This source file is proprietary property of Beech Applications B.V.
-     * Date: 21-11-2016
-     * All code (c) Beech Applications B.V. all rights reserved
-     */
+/*
+ * This source file is proprietary property of Beech Applications B.V.
+ * Date: 21-11-2016
+ * All code (c) Beech Applications B.V. all rights reserved
+ */
+
 use Symfony\Component\Process\Process;
-use Symfony\Component\Process\ProcessBuilder;
 
 /**
  * Class TarCommand
  */
 class TarCommand
 {
-    /**
-     * @var ProcessBuilder
-     */
-    protected $processBuilder;
-
-    /**
-     * MysqlCommand constructor.
-     *
-     * @param ProcessBuilder $processBuilder
-     */
-    public function __construct(ProcessBuilder $processBuilder)
-    {
-        $this->processBuilder = $processBuilder;
-    }
 
     /**
      * @param array $additionalArguments
@@ -36,10 +23,9 @@ class TarCommand
      */
     public function tar(array $additionalArguments = [], $outputCallback = null): int
     {
-        $this->processBuilder->setPrefix(self::getTarBinPath());
-        $this->processBuilder->setArguments($additionalArguments);
-
-        $process = $this->processBuilder->getProcess();
+        $processCommand = array_merge([self::getTarBinPath()], $additionalArguments);
+        $process = new Process($processCommand);
+        $process->setTimeout(600);
         return $process->run($this->buildDefaultOutputCallback($outputCallback));
     }
 

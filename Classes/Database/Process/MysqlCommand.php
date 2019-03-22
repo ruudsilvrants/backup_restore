@@ -7,17 +7,12 @@ namespace BeechIt\BackupRestore\Database\Process;
  * All code (c) Beech Applications B.V. all rights reserved
  */
 use Symfony\Component\Process\Process;
-use Symfony\Component\Process\ProcessBuilder;
 
 /**
  * Class MysqlCommand
  */
 class MysqlCommand
 {
-    /**
-     * @var ProcessBuilder
-     */
-    protected $processBuilder;
 
     /**
      * @var array
@@ -28,12 +23,10 @@ class MysqlCommand
      * MysqlCommand constructor.
      *
      * @param array $dbConfig
-     * @param ProcessBuilder $processBuilder
      */
-    public function __construct(array $dbConfig, ProcessBuilder $processBuilder)
+    public function __construct(array $dbConfig)
     {
         $this->dbConfig = $dbConfig;
-        $this->processBuilder = $processBuilder;
     }
 
     /**
@@ -44,9 +37,9 @@ class MysqlCommand
      */
     public function mysql(array $additionalArguments = [], $inputStream = STDIN, $outputCallback = null): int
     {
-        $this->processBuilder->setPrefix(self::getMysqlBinPath());
-        $this->processBuilder->setArguments(array_merge($this->buildConnectionArguments(), $additionalArguments));
-        $process = $this->processBuilder->getProcess();
+        $processCommand = array_merge([self::getMysqlBinPath()], array_merge($this->buildConnectionArguments(), $additionalArguments));
+        $process = new Process($processCommand);
+        $process->setTimeout(600);
         $process->setInput($inputStream);
         return $process->run($this->buildDefaultOutputCallback($outputCallback));
     }
@@ -58,10 +51,9 @@ class MysqlCommand
      */
     public function mysqldump(array $additionalArguments = array(), $outputCallback = null): int
     {
-        $this->processBuilder->setPrefix(self::getMysqlDumpBinPath());
-        $this->processBuilder->setArguments(array_merge($this->buildConnectionArguments(), $additionalArguments));
-
-        $process = $this->processBuilder->getProcess();
+        $processCommand = array_merge([self::getMysqlBinPath()], array_merge($this->buildConnectionArguments(), $additionalArguments));
+        $process = new Process($processCommand);
+        $process->setTimeout(600);
         return $process->run($this->buildDefaultOutputCallback($outputCallback));
     }
 

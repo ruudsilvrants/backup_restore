@@ -11,7 +11,6 @@ use BeechIt\BackupRestore\File\Process\TarCommand;
 use Helhum\Typo3Console\Database\Schema\SchemaUpdateType;
 use Helhum\Typo3Console\Mvc\Controller\CommandController;
 use Symfony\Component\Process\Process;
-use Symfony\Component\Process\ProcessBuilder;
 use TYPO3\CMS\Core\Crypto\Random;
 use TYPO3\CMS\Core\Database\DatabaseConnection;
 use TYPO3\CMS\Core\Resource\ResourceFactory;
@@ -99,9 +98,7 @@ class BackupCommandController extends CommandController
         $dbDump = $this->dumpDB($tmpFolder);
         $storageFiles = $this->packageFiles($tmpFolder);
 
-        $processBuilder = new ProcessBuilder();
-        $processBuilder->setTimeout($this->processTimeOut);
-        $tarCommand = new TarCommand($processBuilder);
+        $tarCommand = new TarCommand();
         $tarCommand->tar(
             array_merge([
                 'zcf',
@@ -189,9 +186,7 @@ class BackupCommandController extends CommandController
             $this->outputLine('Backup ' . $backup . ' (' . $backupFile . ') not found!!');
             $this->quit(1);
         }
-        $processBuilder = new ProcessBuilder();
-        $processBuilder->setTimeout($this->processTimeOut);
-        $tarCommand = new TarCommand($processBuilder);
+        $tarCommand = new TarCommand();
         $tarCommand->tar(
             [
                 'zxf',
@@ -275,9 +270,7 @@ class BackupCommandController extends CommandController
         // Create tmp folder
         GeneralUtility::mkdir($tmpFolder);
 
-        $processBuilder = new ProcessBuilder();
-        $processBuilder->setTimeout($this->processTimeOut);
-        $tarCommand = new TarCommand($processBuilder);
+        $tarCommand = new TarCommand();
         $tarCommand->tar(
             [
                 'zxf',
@@ -456,9 +449,7 @@ class BackupCommandController extends CommandController
      */
     protected function packageFiles($tmpFolder): array
     {
-        $processBuilder = new ProcessBuilder();
-        $processBuilder->setTimeout($this->processTimeOut);
-        $tarCommand = new TarCommand($processBuilder);
+        $tarCommand = new TarCommand();
         $storageFiles = [];
 
         foreach ($this->getStorageInfo() as $storageInfo) {
@@ -579,11 +570,8 @@ class BackupCommandController extends CommandController
     {
         $dbConfig = $this->connectionConfiguration->build();
 
-        $processBuilder = new ProcessBuilder();
-        $processBuilder->setTimeout($this->processTimeOut);
         $mysqlCommand = new MysqlCommand(
-            $dbConfig,
-            $processBuilder
+            $dbConfig
         );
         $dbDumpFile = 'db.sql';
         $path = $tmpFolder . $dbDumpFile;
@@ -599,7 +587,7 @@ class BackupCommandController extends CommandController
 
         if ($exitCode) {
             $this->output->outputLine('<error>Database backup failed</error>');
-            $this->quit(1);
+            $this->quit(Process::$exitCodes[1]);
         }
 
         $this->outputLine('Database dump created (%s)', [GeneralUtility::formatSize(filesize($path), 'si') . 'B']);
@@ -622,11 +610,8 @@ class BackupCommandController extends CommandController
         }
 
         $dbConfig = $this->connectionConfiguration->build();
-        $processBuilder = new ProcessBuilder();
-        $processBuilder->setTimeout($this->processTimeOut);
         $mysqlCommand = new MysqlCommand(
-            $dbConfig,
-            $processBuilder
+            $dbConfig
         );
 
         $exitCode = $mysqlCommand->mysql(
