@@ -12,7 +12,7 @@ use Helhum\Typo3Console\Database\Schema\SchemaUpdateType;
 use Helhum\Typo3Console\Mvc\Controller\CommandController;
 use Symfony\Component\Process\Process;
 use TYPO3\CMS\Core\Crypto\Random;
-use TYPO3\CMS\Core\Database\DatabaseConnection;
+use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Resource\ResourceFactory;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\PathUtility;
@@ -112,7 +112,7 @@ class BackupCommandController extends CommandController
         );
         GeneralUtility::fixPermissions($target);
 
-        $this->outputLine('Created "%s" (%s)', [$target, GeneralUtility::formatSize(filesize($target), 'si') . 'B']);
+        $this->outputLine('<info>Created</info> "%s" (%s)', [$target, GeneralUtility::formatSize(filesize($target), 'si') . 'B']);
     }
 
     /**
@@ -522,17 +522,11 @@ class BackupCommandController extends CommandController
         ];
 
         $table = 'sys_file_storage';
-        $storages = $this->getDatabaseConnection()->exec_SELECTgetRows(
-            '*',
-            $table,
-            '1=1'
-            . \TYPO3\CMS\Backend\Utility\BackendUtility::BEenableFields($table)
-            . \TYPO3\CMS\Backend\Utility\BackendUtility::deleteClause($table),
-            '',
-            'name',
-            '',
-            'uid'
-        );
+        $storages = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('tt_content')
+            ->select(
+                ['uid', 'name', 'processingfolder', 'driver', 'is_online', 'configuration' ],
+                $table
+            )->fetchAll();
 
         foreach ((array)$storages as $storageRecord) {
             if ($storageRecord['driver'] !== 'Local' || empty($storageRecord['is_online'])) {
