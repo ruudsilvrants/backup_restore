@@ -1,4 +1,5 @@
 <?php
+
 namespace BeechIt\BackupRestore\Command;
 
 /*
@@ -6,13 +7,18 @@ namespace BeechIt\BackupRestore\Command;
  * Date: 01-10-2015
  * All code (c) Beech Applications B.V. all rights reserved
  */
+
 use BeechIt\BackupRestore\Database\Process\MysqlCommand;
 use BeechIt\BackupRestore\File\Process\TarCommand;
+use Doctrine\DBAL\DBALException;
 use Helhum\Typo3Console\Database\Schema\SchemaUpdateType;
 use Helhum\Typo3Console\Mvc\Controller\CommandController;
+use Helhum\Typo3Console\Service\Persistence\TableDoesNotExistException;
 use Symfony\Component\Process\Process;
 use TYPO3\CMS\Core\Crypto\Random;
+use TYPO3\CMS\Core\Database\Connection;
 use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Database\Query\QueryBuilder;
 use TYPO3\CMS\Core\Resource\ResourceFactory;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\PathUtility;
@@ -80,11 +86,11 @@ class BackupCommandController extends CommandController
      */
     public function createCommand($prefix = '', $backupFolder = '')
     {
-        if (!$this->checkIfBinaryExists($this->getTarBinPath())) {
+        if (!$this->checkIfBinaryExists(TarCommand::getTarBinPath())) {
             $this->outputLine('Please set correct ENV path_tar_bin to tar binary');
             $this->quit(1);
         }
-        if (!$this->checkIfBinaryExists($this->getMysqlDumpBinPath())) {
+        if (!$this->checkIfBinaryExists(MysqlCommand::getMysqlDumpBinPath())) {
             $this->outputLine('Please set correct ENV path_mysqldump_bin to mysqldump binary');
             $this->quit(1);
         }
@@ -112,7 +118,8 @@ class BackupCommandController extends CommandController
         );
         GeneralUtility::fixPermissions($target);
 
-        $this->outputLine('<info>Created</info> "%s" (%s)', [$target, GeneralUtility::formatSize(filesize($target), 'si') . 'B']);
+        $this->outputLine('<info>Created</info> "%s" (%s)',
+            [$target, GeneralUtility::formatSize(filesize($target), 'si') . 'B']);
     }
 
     /**
@@ -148,18 +155,18 @@ class BackupCommandController extends CommandController
             $this->outputLine('<error>Restore is not possible in <em>Production</em> context without the <i>--force</i> option</error>');
             $this->quit(1);
         }
-        if (!$this->checkIfBinaryExists($this->getTarBinPath())) {
+        if (!$this->checkIfBinaryExists(TarCommand::getTarBinPath())) {
             $this->outputLine('Please set correct ENV path_tar_bin to tar binary');
             $this->quit(1);
         }
-        if (!$this->checkIfBinaryExists($this->getMysqlBinPath())) {
+        if (!$this->checkIfBinaryExists(MysqlCommand::getMysqlBinPath())) {
             $this->outputLine('Please set correct ENV path_mysql_bin to mysql binary');
             $this->quit(1);
         }
 
         $this->setBackupFolder($backupFolder);
 
-        while(empty($backup)) {
+        while (empty($backup)) {
             $backups = $this->getAvailableBackups();
             if ($backups === []) {
                 $this->output->outputLine('<error>No backups found in "%s" to restore!</error>', [$this->backupFolder]);
@@ -167,7 +174,7 @@ class BackupCommandController extends CommandController
             }
             $default = end(array_keys($backups));
             $backup = $this->output->select(
-                'Select backup [' . $default .']:',
+                'Select backup [' . $default . ']:',
                 $backups,
                 $default,
                 false,
@@ -202,7 +209,7 @@ class BackupCommandController extends CommandController
         } else {
             // legacy db dump
             $legacyDbDump = $tmpFolder . preg_replace('/-backup$/', '', $backup) . '-db.sql';
-            if (is_file($legacyDbDump)){
+            if (is_file($legacyDbDump)) {
                 $this->restoreDB($legacyDbDump, $plainRestore);
             }
         }
@@ -263,7 +270,8 @@ class BackupCommandController extends CommandController
      * @param string $tmpFolder folder to temporary extract the files
      * @param string $fileBackups path of files tgz file
      */
-    protected function legacyRestore($tmpFolder, $fileBackups) {
+    protected function legacyRestore($tmpFolder, $fileBackups)
+    {
 
         $tmpFolder .= 'file-storages/';
 
@@ -300,11 +308,31 @@ class BackupCommandController extends CommandController
      */
     protected function createCopyOfTablesToMerge()
     {
-        $db = $this->getDatabaseConnection();
+        /** @var Connection $dbConnection */
+        $dbConnection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionByName(ConnectionPool::DEFAULT_CONNECTION_NAME);
         foreach (['sys_domain', 'be_users', 'tx_scheduler_task'] as $table) {
-            $db->sql_query('CREATE TABLE ' . $table . '_local LIKE ' . $table);
-            $db->sql_query('INSERT INTO ' . $table . '_local SELECT * FROM ' . $table);
+            try {
+                $dbConnection->exec('CREATE TABLE ' . $table . '_local LIKE ' . $table);
+                $dbConnection->exec('INSERT INTO ' . $table . '_local SELECT * FROM ' . $table);
+            } catch (DBALException $ex) {
+                $this->output->outputLine('<error>Failed creating</error> <i>%s</i>', [$table . '_local']);
+                return;
+            }
             $this->output->outputLine('Created <i>%s</i>', [$table . '_local']);
+        }
+    }
+
+    protected function dropCopiedTablesUsedForMerge()
+    {
+        /** @var Connection $dbConnection */
+        $dbConnection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionByName(ConnectionPool::DEFAULT_CONNECTION_NAME);
+        foreach (['sys_domain', 'be_users', 'tx_scheduler_task'] as $table) {
+            try {
+                $dbConnection->exec('DROP TABLE  ' . $table . '_local');
+                $this->output->outputLine('<info>Deleted</info> <i>%s</i>', [$table . '_local']);
+            } catch (DBALException $ex) {
+                $this->output->outputLine('<error>Failed dropping table </error> <i>%s</i>', [$table . '_local']);
+            }
         }
     }
 
@@ -315,13 +343,13 @@ class BackupCommandController extends CommandController
      */
     protected function sanitizeRestoredTables()
     {
-        $db = $this->getDatabaseConnection();
-
-        $availableTables = $db->admin_get_tables();
-        if (isset($availableTables['fe_users'])) {
-            $db->sql_query('UPDATE fe_users SET username = MD5(username), password = MD5(password), email = CONCAT(LEFT(UUID(), 8), "@beech.it") WHERE email NOT LIKE "%@beech.it"');
-
+        /** @var Connection $connection */
+        $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('fe_users');
+        try {
+            $connection->exec('UPDATE fe_users SET username = MD5(username), password = MD5(password), email = CONCAT(LEFT(UUID(), 8), "@beech.it") WHERE email NOT LIKE "%@beech.it"');
             $this->output->outputLine('<info>Sanitized `fe_users` table</info>');
+        } catch (DBALException $ex) {
+            $this->output->outputLine('<error>Could not sanitize `fe_users` table</error>');
         }
     }
 
@@ -332,87 +360,163 @@ class BackupCommandController extends CommandController
      */
     protected function mergeRestoredTablesWithLocalCopies()
     {
-        $db = $this->getDatabaseConnection();
-
-        // Keep domain info of local environment
-        $db->sql_query('
-            UPDATE
-                sys_domain AS a
-            JOIN
-                sys_domain_local AS b
-            ON
-                a.uid = b.uid
-            SET
-                a.domainName = b.domainName,
-                a.redirectTo = b.redirectTo
-        ');
-
-        if ($db->sql_error()) {
-            $this->output->outputLine('<error>[SQL ERROR] %s</error>', [$db->sql_error()]);
-        } else {
+        try {
+            $this->updateSysDomainWithLocalInformation();
             $this->output->outputLine('<info>Merged sys_domain with local version</info>');
+        } catch (DBALException $exception) {
+            $this->output->outputLine('<error>[SQL ERROR] %s</error>', [$exception->getMessage()]);
         }
 
-        // Disable all BE users
-        $db->sql_query('UPDATE be_users SET disable = 1');
-
-        // Keep BE users info of local environment
-        $db->sql_query('
-            UPDATE
-                be_users AS a
-            JOIN
-                be_users_local AS b
-            ON
-                a.uid = b.uid
-            SET
-                a.username = b.username,
-                a.password = b.password,
-                a.admin = b.admin,
-                a.disable = b.disable,
-                a.deleted = b.deleted
-        ');
-
-        if ($db->sql_error()) {
-            $this->output->outputLine('<error>[SQL ERROR] %s</error>', [$db->sql_error()]);
-        } else {
+        try {
+            $this->disableAllBackendUsers();
+            $this->updateBackendUserWithLocalInformation();
             $this->output->outputLine('<info>Merged be_users with local version (new added users are disabled)</info>');
+        } catch (DBALException $exception) {
+            $this->output->outputLine('<error>[SQL ERROR] %s</error>', [$exception->getMessage()]);
         }
 
-        // Disable all scheduler tasks
-        $db->sql_query('UPDATE tx_scheduler_task SET disable = 1');
+        try {
+            $this->disableAllSchedularTasks();
+            $this->updateSchedularTaskWithLocalInformation();
+            $this->output->outputLine('<info>Merged tx_scheduler_task with local version (new added tasks are disabled)</info>');
+        } catch (DBALException $exception) {
+            $this->output->outputLine('<error>[SQL ERROR] %s</error>', [$exception->getMessage()]);
+        }
+    }
 
-        $update = [];
-        foreach ($db->admin_get_fields('tx_scheduler_task') as $fieldName => $info) {
+    /**
+     * Disable all BE users
+     */
+    protected function disableAllBackendUsers()
+    {
+        /** @var QueryBuilder $queryBuilder */
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('be_users');
+        $queryBuilder->update('be_users')
+            ->set('disable', 1)
+            ->execute();
+    }
+
+    protected function updateBackendUserWithLocalInformation()
+    {
+        /** @var QueryBuilder $queryBuilderForSysDomain */
+        $queryBuilderForSysDomain = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('be_users');
+        $queryBuilderForSysDomain->update('be_users')
+            ->join(
+                'be_users',
+                'be_users_local',
+                'local',
+                $queryBuilderForSysDomain->expr()->eq('local.uid',
+                    $queryBuilderForSysDomain->quoteIdentifier('be_users.uid'))
+            )
+            ->set('be_users.username', $queryBuilderForSysDomain->quoteIdentifier('local.username'))
+            ->set('be_users.password', $queryBuilderForSysDomain->quoteIdentifier('local.password'))
+            ->set('be_users.admin', $queryBuilderForSysDomain->quoteIdentifier('local.admin'))
+            ->set('be_users.disable', $queryBuilderForSysDomain->quoteIdentifier('local.disable'))
+            ->set('be_users.deleted', $queryBuilderForSysDomain->quoteIdentifier('local.deleted'))
+            ->execute();
+    }
+
+    /**
+     * Disable all BE users
+     */
+    protected function disableAllSchedularTasks()
+    {
+        /** @var QueryBuilder $queryBuilder */
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_scheduler_task');
+        $queryBuilder->update('tx_scheduler_task')
+            ->set('disable', 1)
+            ->execute();
+    }
+
+    protected function updateSchedularTaskWithLocalInformation()
+    {
+        $schedulerTaskFields = $this->getFieldsOfTable('tx_scheduler_task');
+
+        $updateFields = [];
+        foreach ($schedulerTaskFields as $fieldName) {
             if ($fieldName === 'uid') {
                 continue;
             }
-            $update[] = 'a.' . $fieldName . ' = b.' . $fieldName;
+            $updateFields[] = $fieldName;
         }
-
-        // Keep scheduler tasks info of local environment
-        $db->sql_query('
-            UPDATE
-                tx_scheduler_task AS a
-            JOIN
-                tx_scheduler_task_local AS b
-            ON
-                a.uid = b.uid
-            SET
-                ' . implode(',', $update) . '
-        ');
-
-        if ($db->sql_error()) {
-            $this->output->outputLine('<error>[SQL ERROR] %s</error>', [$db->sql_error()]);
-        } else {
-            $this->output->outputLine('<info>Merged tx_scheduler_task with local version (new added tasks are disabled)</info>');
+        /** @var QueryBuilder $queryBuilder */
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_scheduler_task');
+        $queryBuilder->update('tx_scheduler_task')
+            ->join(
+                'tx_scheduler_task',
+                'tx_scheduler_task_local',
+                'local',
+                $queryBuilder->expr()->eq(
+                    'local.uid',
+                    $queryBuilder->quoteIdentifier('tx_scheduler_task.uid')
+                )
+            );
+        foreach ($updateFields as $updateField) {
+            $field = 'tx_scheduler_task.' . $updateField;
+            $queryBuilder->set(
+                $field,
+                $queryBuilder->quoteIdentifier('local.' . $updateField)
+            );
         }
+        $this->outputLine($queryBuilder->getSQL());
+        $queryBuilder->execute();
+    }
 
+    protected function updateSysDomainWithLocalInformation()
+    {
+        /** @var QueryBuilder $queryBuilderForSysDomain */
+        $queryBuilderForSysDomain = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('sys_domain');
+        $queryBuilderForSysDomain->update('sys_domain')
+            ->join(
+                'sys_domain',
+                'sys_domain_local',
+                'local',
+                $queryBuilderForSysDomain->expr()->eq(
+                    'local.uid',
+                    $queryBuilderForSysDomain->quoteIdentifier('sys_domain.uid')
+                )
+            )
+            ->set('sys_domain.domainName', $queryBuilderForSysDomain->quoteIdentifier('local.domainName'))
+            ->execute();
+    }
 
-        foreach (['sys_domain', 'be_users', 'tx_scheduler_task'] as $table) {
-            $db->sql_query('DROP TABLE  ' . $table . '_local');
-
-            $this->output->outputLine('Deleted <i>%s</i>', [$table . '_local']);
+    /**
+     * Get tables in the database
+     * @return array
+     */
+    protected function getDatabaseTables(): array
+    {
+        /** @var Connection $dbConnection */
+        $dbConnection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionByName(ConnectionPool::DEFAULT_CONNECTION_NAME);
+        $tables = $dbConnection->getSchemaManager()->listTables();
+        $tableNames = [];
+        foreach ($tables as $table) {
+            $tableNames[] = $table->getName();
         }
+        return $tableNames;
+    }
+
+    /**
+     * @param $tableName
+     * @return array
+     * @throws TableDoesNotExistException
+     */
+    protected function getFieldsOfTable($tableName): array
+    {
+        /** @var Connection $dbConnection */
+        $dbConnection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionByName(ConnectionPool::DEFAULT_CONNECTION_NAME);
+        $tables = $dbConnection->getSchemaManager()->listTables();
+        foreach ($tables as $table) {
+            if ($tableName !== $table->getName()) {
+                continue;
+            }
+            $fields = [];
+            foreach ($table->getColumns() as $column) {
+                $fields[] = $column->getName();
+            }
+            return $fields;
+        }
+        throw new TableDoesNotExistException('Table does not exist');
     }
 
     /**
@@ -426,7 +530,7 @@ class BackupCommandController extends CommandController
      */
     public function dbCommand($prefix = '', $backupFolder = '')
     {
-        if (!$this->checkIfBinaryExists($this->getMysqlDumpBinPath())) {
+        if (!$this->checkIfBinaryExists(MysqlCommand::getMysqlDumpBinPath())) {
             $this->outputLine('Please set correct ENV path_mysqldump_bin to mysqldump binary');
             $this->quit(1);
         }
@@ -474,7 +578,8 @@ class BackupCommandController extends CommandController
                 $this->buildOutputClosure()
             );
 
-            $this->outputLine('Packed storage "%s" (%s)', [$storageInfo['name'], GeneralUtility::formatSize(filesize($tmpFolder . $file), 'si') . 'B']);
+            $this->outputLine('Packed storage "%s" (%s)',
+                [$storageInfo['name'], GeneralUtility::formatSize(filesize($tmpFolder . $file), 'si') . 'B']);
 
             $this->tmpFiles[] = $tmpFolder . $file;
         }
@@ -524,7 +629,7 @@ class BackupCommandController extends CommandController
         $table = 'sys_file_storage';
         $storages = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('tt_content')
             ->select(
-                ['uid', 'name', 'processingfolder', 'driver', 'is_online', 'configuration' ],
+                ['uid', 'name', 'processingfolder', 'driver', 'is_online', 'configuration'],
                 $table
             )->fetchAll();
 
@@ -581,7 +686,7 @@ class BackupCommandController extends CommandController
 
         if ($exitCode) {
             $this->output->outputLine('<error>Database backup failed</error>');
-            $this->quit(Process::$exitCodes[1]);
+            $this->quit(1);
         }
 
         $this->outputLine('Database dump created (%s)', [GeneralUtility::formatSize(filesize($path), 'si') . 'B']);
@@ -621,6 +726,7 @@ class BackupCommandController extends CommandController
             if (!$plainRestore) {
                 $this->sanitizeRestoredTables();
                 $this->mergeRestoredTablesWithLocalCopies();
+                $this->dropCopiedTablesUsedForMerge();
             }
 
             // Update DB to be sure all needed tables are present
@@ -681,15 +787,24 @@ class BackupCommandController extends CommandController
     {
         $tables = [];
 
-        $truncatedPrefixes = ['cf_', 'cache_', 'zzz_', 'tx_extensionmanager_domain_model_extension', 'tx_extensionmanager_domain_model_repository', 'tx_realurl_errorlog', 'sys_lockedrecords', 'be_sessions'];
+        $truncatedPrefixes = [
+            'cf_',
+            'cache_',
+            'zzz_',
+            'tx_extensionmanager_domain_model_extension',
+            'tx_extensionmanager_domain_model_repository',
+            'tx_realurl_errorlog',
+            'sys_lockedrecords',
+            'be_sessions'
+        ];
 
-        $tableList = array_keys($GLOBALS['TYPO3_DB']->admin_get_tables());
+        $tableList = $this->getDatabaseTables();
         foreach ($tableList as $tableName) {
-            $found = FALSE;
+            $found = false;
             foreach ($truncatedPrefixes as $prefix) {
                 if ($found || GeneralUtility::isFirstPartOfStr($tableName, $prefix)) {
                     $tables[$tableName] = $tableName;
-                    $found = TRUE;
+                    $found = true;
                 }
             }
         }
@@ -706,7 +821,8 @@ class BackupCommandController extends CommandController
      */
     protected function setBackupFolder($backupFolder = '')
     {
-        $this->backupFolder = rtrim(PathUtility::getCanonicalPath($backupFolder ?: $this->getDefaultBackupFolder()), '/') . '/';
+        $this->backupFolder = rtrim(PathUtility::getCanonicalPath($backupFolder ?: $this->getDefaultBackupFolder()),
+                '/') . '/';
         if (!is_dir($this->backupFolder)) {
             GeneralUtility::mkdir_deep($this->backupFolder);
         }
@@ -729,7 +845,7 @@ class BackupCommandController extends CommandController
      *
      * @return string
      */
-    private function getDefaultBackupFolder()
+    private function getDefaultBackupFolder(): string
     {
         $path = rtrim(PathUtility::getCanonicalPath(PATH_site . self::PATH), '/') . '/';
 
@@ -746,7 +862,7 @@ class BackupCommandController extends CommandController
      * @param string $prefix
      * @return string
      */
-    protected function getPath($prefix)
+    protected function getPath($prefix): string
     {
         $path = $this->backupFolder;
 
@@ -764,51 +880,9 @@ class BackupCommandController extends CommandController
      *
      * @return string
      */
-    protected function createPrefix()
+    protected function createPrefix(): string
     {
         return date('Y-m-d_h-i') . '-' . GeneralUtility::makeInstance(Random::class)->generateRandomHexString(16);
-    }
-
-    /**
-     * Get path to mysql bin
-     *
-     * @return string
-     */
-    protected function getMysqlBinPath()
-    {
-        if (getenv('path_mysql_bin')) {
-            return getenv('path_mysql_bin');
-        }
-
-        return 'mysql';
-    }
-
-    /**
-     * Get path to mysqldump bin
-     *
-     * @return string
-     */
-    protected function getMysqlDumpBinPath()
-    {
-        if (getenv('path_mysqldump_bin')) {
-            return getenv('path_mysqldump_bin');
-        }
-
-        return 'mysqldump';
-    }
-
-    /**
-     * Get path to tar bin
-     *
-     * @return string
-     */
-    protected function getTarBinPath()
-    {
-        if (getenv('path_tar_bin')) {
-            return getenv('path_tar_bin');
-        } else {
-            return 'tar';
-        }
     }
 
     /**
@@ -817,18 +891,10 @@ class BackupCommandController extends CommandController
      * @param string $binary
      * @return bool
      */
-    protected function checkIfBinaryExists($binary)
+    protected function checkIfBinaryExists($binary): bool
     {
         $returnVal = shell_exec('which ' . $binary);
         return (empty($returnVal) ? false : true);
-    }
-
-    /**
-     * @return DatabaseConnection
-     */
-    protected function getDatabaseConnection()
-    {
-        return $GLOBALS['TYPO3_DB'];
     }
 
     /**

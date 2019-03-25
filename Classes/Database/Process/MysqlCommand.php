@@ -51,7 +51,7 @@ class MysqlCommand
      */
     public function mysqldump(array $additionalArguments = array(), $outputCallback = null): int
     {
-        $processCommand = array_merge([self::getMysqlBinPath()], array_merge($this->buildConnectionArguments(), $additionalArguments));
+        $processCommand = array_merge([self::getMysqlDumpBinPath()], array_merge($this->buildConnectionArguments(), $additionalArguments));
         $process = new Process($processCommand);
         $process->setTimeout(600);
         return $process->run($this->buildDefaultOutputCallback($outputCallback));
