@@ -458,7 +458,6 @@ class BackupCommandController extends CommandController
                 $queryBuilder->quoteIdentifier('local.' . $updateField)
             );
         }
-        $this->outputLine($queryBuilder->getSQL());
         $queryBuilder->execute();
     }
 
