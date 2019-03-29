@@ -398,22 +398,20 @@ class BackupCommandController extends CommandController
 
     protected function updateBackendUserWithLocalInformation()
     {
-        /** @var QueryBuilder $queryBuilderForSysDomain */
-        $queryBuilderForSysDomain = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('be_users');
-        $queryBuilderForSysDomain->update('be_users')
-            ->join(
-                'be_users',
-                'be_users_local',
-                'local',
-                $queryBuilderForSysDomain->expr()->eq('local.uid',
-                    $queryBuilderForSysDomain->quoteIdentifier('be_users.uid'))
-            )
-            ->set('be_users.username', $queryBuilderForSysDomain->quoteIdentifier('local.username'))
-            ->set('be_users.password', $queryBuilderForSysDomain->quoteIdentifier('local.password'))
-            ->set('be_users.admin', $queryBuilderForSysDomain->quoteIdentifier('local.admin'))
-            ->set('be_users.disable', $queryBuilderForSysDomain->quoteIdentifier('local.disable'))
-            ->set('be_users.deleted', $queryBuilderForSysDomain->quoteIdentifier('local.deleted'))
-            ->execute();
+        $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('be_users');
+        $connection->exec('
+            UPDATE
+                be_users AS a
+            JOIN
+                be_users_local AS b
+            ON
+                a.uid = b.uid
+            SET
+                a.username = b.username,
+                a.password = b.password,
+                a.admin = b.admin,
+                a.disable = b.disable,
+                a.deleted = b.deleted');
     }
 
     /**
@@ -437,46 +435,33 @@ class BackupCommandController extends CommandController
             if ($fieldName === 'uid') {
                 continue;
             }
-            $updateFields[] = $fieldName;
+            $updateFields[] = 'a.' . $fieldName . ' = b.' . $fieldName;
         }
-        /** @var QueryBuilder $queryBuilder */
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_scheduler_task');
-        $queryBuilder->update('tx_scheduler_task')
-            ->join(
-                'tx_scheduler_task',
-                'tx_scheduler_task_local',
-                'local',
-                $queryBuilder->expr()->eq(
-                    'local.uid',
-                    $queryBuilder->quoteIdentifier('tx_scheduler_task.uid')
-                )
-            );
-        foreach ($updateFields as $updateField) {
-            $field = 'tx_scheduler_task.' . $updateField;
-            $queryBuilder->set(
-                $field,
-                $queryBuilder->quoteIdentifier('local.' . $updateField)
-            );
-        }
-        $queryBuilder->execute();
+
+        $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('sys_domain');
+        $connection->exec('
+            UPDATE
+                tx_scheduler_task AS a
+            JOIN
+                 tx_scheduler_task_local AS b
+            ON
+                a.uid = b.uid
+            SET
+                ' . implode(',', $updateFields));
     }
 
     protected function updateSysDomainWithLocalInformation()
     {
-        /** @var QueryBuilder $queryBuilderForSysDomain */
-        $queryBuilderForSysDomain = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('sys_domain');
-        $queryBuilderForSysDomain->update('sys_domain')
-            ->join(
-                'sys_domain',
-                'sys_domain_local',
-                'local',
-                $queryBuilderForSysDomain->expr()->eq(
-                    'local.uid',
-                    $queryBuilderForSysDomain->quoteIdentifier('sys_domain.uid')
-                )
-            )
-            ->set('sys_domain.domainName', $queryBuilderForSysDomain->quoteIdentifier('local.domainName'))
-            ->execute();
+        $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('sys_domain');
+        $connection->exec('
+            UPDATE
+                sys_domain AS a
+            JOIN
+                sys_domain_local AS b
+            ON
+                a.uid = b.uid
+            SET
+                a.domainName = b.domainName');
     }
 
     /**
