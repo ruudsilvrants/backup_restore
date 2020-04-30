@@ -43,7 +43,7 @@ class BackupCreateCommand extends \Symfony\Component\Console\Command\Command
 
     /**
      * @var ConnectionConfiguration
-     * @inject
+     * @TYPO3\CMS\Extbase\Annotation\Inject
      */
     protected $connectionConfiguration;
 
