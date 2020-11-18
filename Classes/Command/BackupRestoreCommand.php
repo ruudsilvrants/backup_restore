@@ -19,9 +19,9 @@ use Helhum\Typo3Console\Database\Configuration\ConnectionConfiguration;
 use Helhum\Typo3Console\Database\Schema\SchemaUpdate;
 use Helhum\Typo3Console\Database\Schema\SchemaUpdateType;
 use Helhum\Typo3Console\Service\Database\SchemaService;
-use Helhum\Typo3Console\Service\Persistence\TableDoesNotExistException;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ChoiceQuestion;
 use Symfony\Component\Console\Style\SymfonyStyle;
@@ -84,10 +84,8 @@ class BackupRestoreCommand extends \Symfony\Component\Console\Command\Command
     ) {
         parent::__construct($name);
         $this->connectionConfiguration = $connectionConfiguration ?: new ConnectionConfiguration();
-        $this->schemaService = new SchemaService(
-            new SchemaUpdate(),
-            GeneralUtility::makeInstance(Dispatcher::class)
-        );
+        $this->schemaService = $schemaService ?? new SchemaService(new SchemaUpdate());
+
     }
 
     /**
@@ -97,10 +95,27 @@ class BackupRestoreCommand extends \Symfony\Component\Console\Command\Command
     {
         $this->setDescription('Restore file storages + database from backup');
         $this->addArgument('backup', InputArgument::OPTIONAL, 'Name of backup (with or without file extension)', '');
-        $this->addArgument('backupFolder', InputArgument::OPTIONAL, 'Alternative path of backup folder', '');
-        $this->addArgument('plainRestore', InputArgument::OPTIONAL,
-            'Restore db without sanitizing and merging with local tables', '');
-        $this->addArgument('force', InputArgument::OPTIONAL, 'Force restore in Production context', false);
+        $this->addOption(
+            'backup-folder',
+            'backupFolder',
+            InputOption::VALUE_OPTIONAL,
+            'Alternative path of backup folder',
+            ''
+        );
+        $this->addOption(
+            'plain-restore',
+            'plainRestore',
+            InputOption::VALUE_OPTIONAL,
+            'Restore db without sanitizing and merging with local tables',
+            false
+        );
+        $this->addOption(
+            'force',
+            null,
+            InputOption::VALUE_OPTIONAL,
+            'Force restore in Production context',
+            false
+        );
         $this->setHelp('--');
     }
 
@@ -112,9 +127,18 @@ class BackupRestoreCommand extends \Symfony\Component\Console\Command\Command
             $this->processTimeOut = $processTimeOutEnv;
         }
         $backup = $input->getArgument('backup');
-        $backupFolder = $input->getArgument('backupFolder');
-        $plainRestore = $input->getArgument('plainRestore');
-        $force = $input->getArgument('force');
+        $backupFolder = $input->getOption('backup-folder');
+        $plainRestore = $input->getOption('plain-restore');
+        $force = $input->getOption('force');
+
+        // when implicit the arguments is provided but no value is set. It means that we say the value is true
+        // $ backup:restore --plain-restore => is that we want plain-restore
+        if ($plainRestore === null) {
+            $plainRestore = true;
+        }
+        if ($force === null) {
+            $force = true;
+        }
 
         $this->io = new SymfonyStyle($input, $output);
         $helper = $this->getHelper('question');
