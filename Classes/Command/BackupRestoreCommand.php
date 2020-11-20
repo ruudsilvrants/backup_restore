@@ -53,13 +53,13 @@ class BackupRestoreCommand extends \Symfony\Component\Console\Command\Command
 
     /**
      * @var \Helhum\Typo3Console\Database\Configuration\ConnectionConfiguration
-     * @inject
+     * @TYPO3\CMS\Extbase\Annotation\Inject
      */
     protected $connectionConfiguration;
 
     /**
      * @var \Helhum\Typo3Console\Service\Database\SchemaService
-     * @inject
+     * @TYPO3\CMS\Extbase\Annotation\Inject
      */
     protected $schemaService;
 

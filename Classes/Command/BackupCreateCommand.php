@@ -14,24 +14,14 @@ use BeechIt\BackupRestore\Service\BackupFileService;
 use BeechIt\BackupRestore\Service\DatabaseTableService;
 use BeechIt\BackupRestore\Service\StorageService;
 use BeechIt\BackupRestore\Utility\BinaryUtility;
-use Doctrine\DBAL\DBALException;
 use Helhum\Typo3Console\Database\Configuration\ConnectionConfiguration;
-use Helhum\Typo3Console\Database\Schema\SchemaUpdateType;
-use Helhum\Typo3Console\Service\Persistence\TableDoesNotExistException;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Question\ChoiceQuestion;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Process\Process;
-use TYPO3\CMS\Core\Core\Environment;
 use TYPO3\CMS\Core\Crypto\Random;
-use TYPO3\CMS\Core\Database\Connection;
-use TYPO3\CMS\Core\Database\ConnectionPool;
-use TYPO3\CMS\Core\Database\Query\QueryBuilder;
-use TYPO3\CMS\Core\Resource\ResourceFactory;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\Core\Utility\PathUtility;
 
 /**
  * Class BackupCommandController
@@ -53,7 +43,7 @@ class BackupCreateCommand extends \Symfony\Component\Console\Command\Command
 
     /**
      * @var ConnectionConfiguration
-     * @inject
+     * @TYPO3\CMS\Extbase\Annotation\Inject
      */
     protected $connectionConfiguration;
 
